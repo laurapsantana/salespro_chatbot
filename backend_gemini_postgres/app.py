@@ -3,12 +3,23 @@ from flask import Flask, request, jsonify
 from db import conectar
 import google.generativeai as genai
 import traceback
+import os
+from dotenv import load_dotenv
+from google.api_core.exceptions import ResourceExhausted
 
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-genai.configure(api_key="AIzaSyAelq7EUC3n_bwe1FMZpRiD-lKDuaFbYM4")  # Substitua pela sua chave real
+API_KEY_PRINCIPAL = os.getenv("GOOGLE_API_KEY")
+API_KEY_BACKUP = os.getenv("GOOGLE_API_KEY_BACKUP")
+
+def configurar_api_key(api_key):
+    genai.configure(api_key=api_key)
+    return genai.GenerativeModel("gemini-1.5-flash")
+
+model = configurar_api_key(API_KEY_PRINCIPAL)
 
 def extrair_mes(pergunta):
     meses = {
@@ -198,8 +209,12 @@ def chatbot():
             "- Clientes frequentes\n"
         )
 
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        resposta = model.generate_content(prompt)
+        try:
+            resposta = model.generate_content(prompt)
+        except ResourceExhausted:
+            print("⚠️ Limite excedido na chave principal. Alternando para chave de backup...")
+            model_backup = configurar_api_key(API_KEY_BACKUP)
+            resposta = model_backup.generate_content(prompt)
 
         return jsonify({"relatorio": resposta.text})
 
